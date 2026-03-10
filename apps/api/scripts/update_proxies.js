@@ -1,0 +1,59 @@
+
+const { PrismaClient } = require('@prisma/client');
+
+const prisma = new PrismaClient();
+
+const PROXY_LIST = [
+    "http://brd-customer-hl_b1aa2a1f-zone-2k-ip-178.171.28.33:82rnrzhktw0y@brd.superproxy.io:33335",
+    "http://brd-customer-hl_b1aa2a1f-zone-2k-ip-200.160.46.241:82rnrzhktw0y@brd.superproxy.io:33335",
+    "http://brd-customer-hl_b1aa2a1f-zone-2k-ip-69.17.113.99:82rnrzhktw0y@brd.superproxy.io:33335",
+    "http://brd-customer-hl_b1aa2a1f-zone-2k-ip-185.185.147.184:82rnrzhktw0y@brd.superproxy.io:33335",
+    "http://brd-customer-hl_b1aa2a1f-zone-2k-ip-200.160.44.224:82rnrzhktw0y@brd.superproxy.io:33335",
+    "http://brd-customer-hl_b1aa2a1f-zone-2k-ip-178.171.29.253:82rnrzhktw0y@brd.superproxy.io:33335"
+];
+
+async function main() {
+    console.log("Starting Proxy Migration (JS Mode)...");
+
+    console.log("DB URL:", process.env.DATABASE_URL);
+
+    try {
+        const rawCount = await prisma.$queryRaw`SELECT count(*) FROM "Instance"`;
+        console.log("Raw count (Instance):", rawCount);
+    } catch (e) { console.log("Raw Instance failed", e.message); }
+
+    try {
+        const rawCount2 = await prisma.$queryRaw`SELECT count(*) FROM "instances"`;
+        console.log("Raw count (instances):", rawCount2);
+    } catch (e) { console.log("Raw instances failed", e.message); }
+
+    const instances = await prisma.instance.findMany({
+        orderBy: { name: 'asc' }
+    });
+
+    console.log(`Found ${instances.length} instances.`);
+
+    for (let i = 0; i < instances.length; i++) {
+        const instance = instances[i];
+        const proxyUrl = PROXY_LIST[i % PROXY_LIST.length];
+        const proxyConfig = JSON.stringify({ proxyUrl });
+
+        console.log(`[${i + 1}/${instances.length}] Updating ${instance.name} (${instance.sessionId}) -> ${proxyUrl.split('@')[1]}`);
+
+        await prisma.instance.update({
+            where: { id: instance.id },
+            data: { proxyConfig }
+        });
+    }
+
+    console.log("Migration Complete.");
+}
+
+main()
+    .catch((e) => {
+        console.error(e);
+        process.exit(1);
+    })
+    .finally(async () => {
+        await prisma.$disconnect();
+    });

@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String     @id @default(uuid())
+  email     String     @unique
+  password  String     // Hash
+  name      String?
+  role      String     @default("USER") // "ADMIN" or "USER"
+  apiKey    String     @unique @default(uuid()) // Token for external integration
+  instances Instance[]
+  campaigns Campaign[]
+  createdAt DateTime   @default(now())
+  openaiApiKey String? // [NEW] User provided OpenAI Key
+  openaiAssistantId String? // [NEW] User provided Assistant ID (Hybrid Mode)
+  assets       Asset[] // [FIX] Added relation
+}
+
+// [NEW] Asset storage for Profile Pictures (Hash Buster source)
+model Asset {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   // "PROFILE_PIC"
+  data      String   // Base64 (Text)
+  createdAt DateTime @default(now())
+}
+
+model Instance {
+  id          String     @id @default(uuid())
+  name        String
+  sessionId   String     @unique // Internal name: userId-instanceName
+  status      String     @default("DISCONNECTED")
+  phone       String?
+  proxyConfig String?    // [NEW] JSON or String "host:port:user:pass"
+  warmupNumbers String[] @default([]) // [NEW] Anti-Ban safe contacts list
+  lastKnownIp String?    // [NEW] Public IP seen by the world
+  lastIpCheck DateTime?  // [NEW] When the IP was last checked
+  userId      String?
+  user        User?      @relation(fields: [userId], references: [id])
+  campaigns   Campaign[] // [NEW] N:N relation
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Campaign {
+  id                String         @id @default(uuid())
+  // instanceName String? // [DEPRECATED] - Replaced by instances relation
+  instances         Instance[]     // [NEW] N:N relation
+  instanceName      String?        // kept for legacy/fallback or simple display
+  customDomain      String?        // [NEW] Base domain for dynamic links (e.g. site.com)
+  message           String?
+  messageVariations Json?
+  leads             CampaignLead[]
+  userId            String?
+  user              User?          @relation(fields: [userId], references: [id])
+  status            String         @default("DRAFT")
+  sentCount         Int            @default(0) // [FIX] Added missing field
+  // [HUMAN DELAY CONFIG]
+  minDelay          Int            @default(10)
+  maxDelay          Int            @default(20)
+  minTyping         Int            @default(2)
+  maxTyping         Int            @default(10)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @default(now()) @updatedAt
+}
+
+model CampaignLead {
+  id                 String   @id @default(uuid())
+  campaignId         String
+  campaign           Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  assignedInstanceId String?  // [NEW] Specific instance for this lead
+  number             String
+  variables          Json?
+  status             String   @default("PENDING")
+  error              String?
+  sentAt             DateTime? // [FIX] Added missing field
+  sequence           Int      @default(0) // [NEW] Validation Order
+  createdAt          DateTime @default(now())
+
+  @@index([campaignId])
+  @@index([status])
+  @@index([assignedInstanceId]) // [NEW] Index for performance
+}
+
+model SystemLog {
+  id        String   @id @default(uuid())
+  level     String   // ERROR, WARN, INFO, DEBUG
+  message   String
+  context   String?
+  instanceName String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
+
+model BlockedIp {
+  id           String    @id @default(uuid())
+  ip           String    @unique
+  attempts     Int       @default(0)
+  blockedUntil DateTime?
+  updatedAt    DateTime  @updatedAt
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  endpoint  String   @unique
+  keys      Json     // Store p256dh and auth keys
+  userId    String?  // Optional, if we want to bind to user
+  createdAt DateTime @default(now())
+}
+
+model ConnectionLog {
+  id           String   @id @default(uuid())
+  instanceName String
+  status       String   // CONNECTED, DISCONNECTED
+  reason       String?  // [NEW] "BANNED", "LOGGED_OUT", "TIMEOUT", "MANUAL"
+  metadata     Json?    // [NEW] Raw error details
+  timestamp    DateTime @default(now())
+}

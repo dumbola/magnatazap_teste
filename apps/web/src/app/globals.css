@@ -1,0 +1,163 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    body {
+        @apply bg-midnight text-zinc-200 antialiased selection:bg-neon-green selection:text-black;
+        font-family: 'Inter', sans-serif;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        @apply font-display;
+    }
+}
+
+@layer utilities {
+
+    /* Glass Morphism Card */
+    .glass-card {
+        @apply bg-zinc-900/40 backdrop-blur-xl border border-white/5 shadow-2xl;
+    }
+
+    .glass-card-hover {
+        @apply glass-card hover:bg-zinc-900/60 hover:border-neon-green/20 transition-all duration-300;
+    }
+
+    /* Neon Effects */
+    .neon-border {
+        @apply border border-neon-green/30 shadow-glow;
+    }
+
+    .neon-border-gold {
+        @apply border border-gold/30 shadow-gold-glow;
+    }
+
+    .text-glow {
+        text-shadow: 0 0 10px rgba(0, 230, 118, 0.6), 0 0 20px rgba(0, 230, 118, 0.3);
+    }
+
+    .text-glow-gold {
+        text-shadow: 0 0 10px rgba(255, 215, 0, 0.6), 0 0 20px rgba(255, 215, 0, 0.3);
+    }
+
+    /* Button Luxury */
+    .btn-primary {
+        @apply bg-neon-green hover:bg-neon-green-dark text-black font-bold tracking-wider px-6 py-3 rounded-lg transition-all duration-300 shadow-glow hover:shadow-glow-lg hover:scale-[1.02] active:scale-95;
+    }
+
+    .btn-gold {
+        @apply bg-gradient-to-r from-gold-dark via-gold to-gold-light text-black font-black tracking-widest px-6 py-3 rounded-lg transition-all duration-300 shadow-gold-glow hover:scale-[1.02] active:scale-95;
+    }
+
+    /* Input Luxury */
+    .input-luxury {
+        @apply bg-transparent border-b-2 border-zinc-800 focus:border-neon-green px-4 py-3 text-white placeholder-zinc-600 outline-none transition-colors;
+    }
+
+    /* Text Gradient */
+    .text-gradient {
+        @apply bg-gradient-to-r from-white via-zinc-100 to-zinc-300 bg-clip-text text-transparent;
+    }
+
+    .text-gradient-green {
+        @apply bg-gradient-to-r from-neon-green-light via-neon-green to-neon-green-dark bg-clip-text text-transparent;
+    }
+
+    /* Shimmer Effect */
+    .shimmer {
+        background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.1) 50%,
+                transparent 100%);
+        background-size: 200% 100%;
+        animation: shimmer 3s infinite;
+    }
+
+    /* Scrollbar Luxury */
+    .scrollbar-luxury::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+
+    .scrollbar-luxury::-webkit-scrollbar-track {
+        @apply bg-zinc-950;
+    }
+
+    .scrollbar-luxury::-webkit-scrollbar-thumb {
+        @apply bg-zinc-800 hover:bg-neon-green rounded-full;
+    }
+}
+
+/* Global Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #050505;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #18181b;
+    border-radius: 99px;
+    border: 1px solid #000;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #00e676;
+}
+
+/* Money Flow Background Animation */
+@keyframes money-float {
+
+    0%,
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+        opacity: 0.03;
+    }
+
+    25% {
+        transform: translate(30px, -30px) rotate(90deg);
+        opacity: 0.06;
+    }
+
+    50% {
+        transform: translate(0, -60px) rotate(180deg);
+        opacity: 0.03;
+    }
+
+    75% {
+        transform: translate(-30px, -30px) rotate(270deg);
+        opacity: 0.06;
+    }
+}
+
+.money-symbol {
+    animation: money-float 15s ease-in-out infinite;
+}
+
+/* Fade In Animation for Page Loads */
+@keyframes fade-in-up {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-fade-in-up {
+    animation: fade-in-up 0.6s ease-out;
+}

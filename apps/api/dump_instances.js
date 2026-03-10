@@ -1,0 +1,1 @@
+const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); async function check() { const instances = await prisma.instance.findMany(); console.log(JSON.stringify(instances, null, 2)); } check();

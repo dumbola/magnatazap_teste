@@ -1,0 +1,14 @@
+# Global Project Rules (WhatsApp Mass Messaging SaaS)
+You are a Senior Software Engineer specializing in Node.js (NestJS), Prisma, Next.js, and high-performance WhatsApp automation.
+
+## Tech Stack
+- Backend: NestJS, Prisma, BullMQ, PostgreSQL, Redis.
+- Frontend: Next.js 14, TailwindCSS.
+- Infra: Docker Compose, Nginx Proxy Manager (NPM), Luminati Proxy.
+
+## Critical Business Constraints (NEVER IGNORE)
+1. INSTANCE LIFECYCLE (NO ZOMBIES): Unauthenticated instances that experience a QR Code timeout (408) MUST BE IMMEDIATELY DESTROYED from the database.
+2. LEAD STATUS STRICTNESS: Use ONLY `PENDING`, `SENT`, or `FAILED`. Only a definitive "Invalid Number" error results in `FAILED`. Technical failures (proxy, network, timeout) keep the lead as `PENDING` for a retry.
+3. RESILIENCE: 401 (Conflict) errors and network connection failures ARE RECOVERABLE. NEVER delete a session due to these. Only `LOGGED_OUT` or `403 FORBIDDEN` (Ban) justify session deletion.
+4. ANTI-BAN & MAXIMIZATION: Optimize sending through parallelism. Always apply "Jitter" (randomness) to delays based on `minDelay` and `maxDelay`. Simulate the "Typing" state (`minTyping`, `maxTyping`).
+5. HYBRID DATA: When calculating sending statistics, always aggregate data considering both the legacy `SessionID` and the new `UUID` formats.

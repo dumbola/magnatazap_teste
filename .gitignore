@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+.next/
+
+# Environment & Secrets
+.env
+.env.*
+keys.txt
+
+# Nginx Proxy Manager volumes
+npm-data/
+npm-letsencrypt/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma
+*.db
+*.db-journal
+
+# Logs
+*.log
+logs/

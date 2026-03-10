@@ -1,0 +1,115 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: whatsapp_saas
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_v3:/data
+    command: redis-server --appendonly yes
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: always
+    ports:
+      - "4000:4000"
+
+    # [STABILITY] Fix for Chromium crashing & Node GC limits
+    shm_size: '8gb'
+
+    environment:
+      DATABASE_URL: postgres://user:password@postgres:5432/whatsapp_saas
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NODE_ENV: production
+      # [STABILITY] Increase Node Heap for high-concurrency
+      NODE_OPTIONS: "--max-old-space-size=16384"
+      FRONTEND_URL: "https://magnatazap.com"
+      # [PROXY] Expose Proxy URL to Container
+      WA_PROXY_URL: ${WA_PROXY_URL}
+    volumes:
+      - whatsapp_sessions:/app/sessions
+    depends_on:
+      - postgres
+      - redis
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://api.magnatazap.com
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: https://api.magnatazap.com
+    depends_on:
+      - api
+
+  npm:
+    image: 'jc21/nginx-proxy-manager:latest'
+    restart: always
+    ports:
+      - '80:80'
+      - '81:81'
+      - '443:443'
+    volumes:
+      - ./npm-data:/data
+      - ./npm-letsencrypt:/etc/letsencrypt
+    depends_on:
+      - api
+      - web
+
+  proxy-manager:
+    image: luminati/luminati-proxy
+    restart: always
+    ports:
+      - "22999:22999" # Admin Interface
+      - "24000:24000" # Proxy Port
+    environment:
+      - LUMINATI_CUSTOMER=hl_b1aa2a1f
+      - LUMINATI_ZONE=5k
+      - LUMINATI_PASSWORD=benxs7ng2f9d
+    # [AUTO-CONFIG] Start with port 24000 configured for the zone
+    command:
+      - luminati-proxy
+      - "--port"
+      - "24000"
+      - "--zone"
+      - "5k"
+      - "--customer"
+      - "hl_b1aa2a1f"
+      - "--password"
+      - "benxs7ng2f9d"
+      - "--whitelist_ips"
+      - "0.0.0.0/0"
+      - "--www_whitelist_ips"
+      - "0.0.0.0/0"
+      - "--log"
+      - "info"
+      - "--www"
+      - "22999"
+      - "--proxy_type"
+      - "http"
+
+volumes:
+  postgres_data:
+  redis_data_v3:
+  whatsapp_sessions:
