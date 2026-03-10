@@ -22,10 +22,8 @@ async function bootstrap() {
     app.enableCors({
         origin: [
             ...frontendUrls,
-            'https://magnatazap.com',
-            'https://api.magnatazap.com',
+            'http://178.156.166.139:3000',
             'http://localhost:3000',
-            'http://5.161.85.105:3000'
         ],
         credentials: true,
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
