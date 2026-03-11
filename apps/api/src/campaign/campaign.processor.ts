@@ -371,17 +371,34 @@ export class CampaignProcessor extends WorkerHost {
                 await client.socket.sendMessage(onWa.jid, { text: finalMessage });
 
                 // [SUCCESS] Mark as SENT
+                const sentTimestamp = new Date();
                 if (leadId) {
                     await this.prisma.campaignLead.update({
                         where: { id: leadId },
                         data: { 
                             status: 'SENT', 
-                            sentAt: new Date(), 
+                            sentAt: sentTimestamp, 
                             assignedInstanceId: selectedInstanceId 
                         }
                     });
                 }
                 
+                // [DISPATCH LOG] Per-account tracking
+                // selectedInstanceId is a sessionId; resolve to UUID via campaignConfig.instances
+                const resolvedUuid = campaignConfig.instances?.find(i => i.sessionId === selectedInstanceId)?.id;
+                if (resolvedUuid && campaignConfig.userId) {
+                    await this.prisma.dispatchLog.create({
+                        data: {
+                            instanceId: resolvedUuid,
+                            userId: campaignConfig.userId,
+                            number: cleanNumber,
+                            status: 'SENT',
+                            campaignId,
+                            sentAt: sentTimestamp,
+                        }
+                    }).catch(err => this.logger.warn(`[DispatchLog] Failed to write: ${err.message}`));
+                }
+
                 // Update Campaign Stats
                 await this.prisma.campaign.update({
                     where: { id: campaignId },
@@ -394,8 +411,20 @@ export class CampaignProcessor extends WorkerHost {
                 const isInvalid = msg.includes('invalid') || msg.includes('not on whatsapp') || msg.includes('no exists');
 
                 if (isInvalid && leadId) {
-                    // Permanent Fail
                     await this.markAsFailed(leadId, 'Invalid Number');
+                    const failedUuid = campaignConfig.instances?.find(i => i.sessionId === selectedInstanceId)?.id;
+                    if (failedUuid && campaignConfig.userId) {
+                        await this.prisma.dispatchLog.create({
+                            data: {
+                                instanceId: failedUuid,
+                                userId: campaignConfig.userId,
+                                number: cleanNumber,
+                                status: 'FAILED',
+                                error: 'Invalid Number',
+                                campaignId,
+                            }
+                        }).catch(err => this.logger.warn(`[DispatchLog] Failed to write: ${err.message}`));
+                    }
                 } else {
                     // Technical Fail -> Keep PENDING (Retry)
                     // Do NOT mark as FAILED. Just throw to let BullMQ retry.

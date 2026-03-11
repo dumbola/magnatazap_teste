@@ -16,6 +16,7 @@ model User {
   apiKey    String     @unique @default(uuid()) // Token for external integration
   instances Instance[]
   campaigns Campaign[]
+  dispatchLogs DispatchLog[]
   createdAt DateTime   @default(now())
   openaiApiKey String? // [NEW] User provided OpenAI Key
   openaiAssistantId String? // [NEW] User provided Assistant ID (Hybrid Mode)
@@ -45,6 +46,7 @@ model Instance {
   userId      String?
   user        User?      @relation(fields: [userId], references: [id])
   campaigns   Campaign[] // [NEW] N:N relation
+  dispatchLogs DispatchLog[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 }
@@ -122,4 +124,22 @@ model ConnectionLog {
   reason       String?  // [NEW] "BANNED", "LOGGED_OUT", "TIMEOUT", "MANUAL"
   metadata     Json?    // [NEW] Raw error details
   timestamp    DateTime @default(now())
+}
+
+model DispatchLog {
+  id           String    @id @default(uuid())
+  instanceId   String
+  instance     Instance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  number       String
+  status       String    @default("SENT") // SENT, FAILED
+  error        String?
+  campaignId   String?
+  sentAt       DateTime  @default(now())
+
+  @@index([instanceId])
+  @@index([userId])
+  @@index([sentAt])
+  @@index([userId, sentAt])
 }

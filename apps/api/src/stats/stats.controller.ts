@@ -2,7 +2,7 @@ import { Controller, Get, Query, UseGuards, Request, Logger } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthGuard } from '@nestjs/passport';
 
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard(['jwt', 'api-key']))
 @Controller('stats')
 export class StatsController {
     private readonly logger = new Logger(StatsController.name);
@@ -18,10 +18,9 @@ export class StatsController {
         const userId = req.user.id;
         this.logger.log(`[STATS] Fetching Stats... User: ${userId} | Start: ${startQuery} | End: ${endQuery}`);
 
-        // 1. Determine Date Range
         const now = new Date();
-        const start = startQuery ? new Date(startQuery) : new Date(now.setHours(0, 0, 0, 0));
-        const end = endQuery ? new Date(endQuery) : new Date(now.setHours(23, 59, 59, 999));
+        const start = startQuery ? new Date(startQuery) : new Date(new Date().setHours(0, 0, 0, 0));
+        const end = endQuery ? new Date(endQuery) : new Date(new Date().setHours(23, 59, 59, 999));
 
         if (isNaN(start.getTime()) || isNaN(end.getTime())) {
             const fallbackStart = new Date();
@@ -31,76 +30,77 @@ export class StatsController {
             return this.getStats(req, fallbackStart.toISOString(), fallbackEnd.toISOString());
         }
 
-        // 2. Parallel Data Fetching (Direct Counts)
+        // Hybrid: query both DispatchLog (new) and CampaignLead (legacy)
         const [
-            totalSent,
-            totalSentAllTime, // [NEW] Total Lifetime
+            dispatchSentPeriod,
+            dispatchSentAllTime,
+            legacySentPeriod,
+            legacySentAllTime,
             activeInstances,
             totalInstances,
             totalCampaigns,
-            chartDataRaw,
+            dispatchChartRaw,
+            legacyChartRaw,
             instances,
-            messageCountsByInstance
+            dispatchCountsByInstance,
+            legacyCountsByInstance
         ] = await Promise.all([
-            // [METRIC] Total Sent (Filtered by Date)
-            this.prisma.campaignLead.count({
-                where: {
-                    status: 'SENT',
-                    sentAt: { gte: start, lte: end },
-                    campaign: { userId }
-                }
+            this.prisma.dispatchLog.count({
+                where: { userId, status: 'SENT', sentAt: { gte: start, lte: end } }
             }),
-            // [METRIC] Total Sent (All Time)
-            this.prisma.campaignLead.count({
-                where: {
-                    status: 'SENT',
-                    campaign: { userId }
-                }
+            this.prisma.dispatchLog.count({
+                where: { userId, status: 'SENT' }
             }),
-            // [METRIC] Active Instances
+            this.prisma.campaignLead.count({
+                where: { status: 'SENT', sentAt: { gte: start, lte: end }, campaign: { userId } }
+            }),
+            this.prisma.campaignLead.count({
+                where: { status: 'SENT', campaign: { userId } }
+            }),
             this.prisma.instance.count({
                 where: { userId, status: 'CONNECTED' }
             }),
-            // [METRIC] Total Instances
             this.prisma.instance.count({
                 where: { userId }
             }),
-            // [METRIC] Total Campaigns
             this.prisma.campaign.count({
                 where: { userId }
             }),
-            // [CHART] Raw Dates for Graph
-            this.prisma.campaignLead.findMany({
-                where: {
-                    status: 'SENT',
-                    sentAt: { gte: start, lte: end },
-                    campaign: { userId }
-                },
+            this.prisma.dispatchLog.findMany({
+                where: { userId, status: 'SENT', sentAt: { gte: start, lte: end } },
                 select: { sentAt: true }
             }),
-            // [HISTORY] All Instances for Table
+            this.prisma.campaignLead.findMany({
+                where: { status: 'SENT', sentAt: { gte: start, lte: end }, campaign: { userId } },
+                select: { sentAt: true }
+            }),
             this.prisma.instance.findMany({
                 where: { userId },
-                select: { id: true, name: true, status: true, sessionId: true }
+                select: { id: true, name: true, status: true, sessionId: true, phone: true }
             }),
-            // [HISTORY] Grouped Counts by Instance
+            this.prisma.dispatchLog.groupBy({
+                by: ['instanceId'],
+                where: { userId, status: 'SENT', sentAt: { gte: start, lte: end } },
+                _count: { id: true }
+            }),
             this.prisma.campaignLead.groupBy({
                 by: ['assignedInstanceId'],
-                where: {
-                    status: 'SENT',
-                    sentAt: { gte: start, lte: end },
-                    campaign: { userId }
-                },
+                where: { status: 'SENT', sentAt: { gte: start, lte: end }, campaign: { userId } },
                 _count: { id: true }
             })
         ]);
 
-        // 3. Process Chart Data (Group by Hour/Day)
+        // Hybrid aggregation: use whichever source has more data
+        const totalSent = Math.max(dispatchSentPeriod, legacySentPeriod);
+        const totalSentAllTime = Math.max(dispatchSentAllTime, legacySentAllTime);
+
+        // Chart: use the richer dataset
+        const chartSource = dispatchChartRaw.length >= legacyChartRaw.length ? dispatchChartRaw : legacyChartRaw;
+
         const diffHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
         const isMultiDay = diffHours > 24;
         const chartMap = new Map<string, number>();
 
-        // Initialize Map with Zeros
         if (isMultiDay) {
             for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
                 chartMap.set(d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), 0);
@@ -111,10 +111,9 @@ export class StatsController {
             }
         }
 
-        // Fill Map
-        chartDataRaw.forEach(log => {
+        chartSource.forEach(log => {
             if (!log.sentAt) return;
-            let key;
+            let key: string;
             if (isMultiDay) {
                 key = new Date(log.sentAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
             } else {
@@ -125,13 +124,24 @@ export class StatsController {
 
         const chartData = Array.from(chartMap.entries()).map(([time, value]) => ({ time, value }));
 
-        // 4. Process History (Simplified: Instance Status + Total Sent)
-        // Map counts for O(1) lookup
+        // Hybrid instance counts: merge DispatchLog (UUID) + CampaignLead (sessionId)
+        // Build sessionId→UUID lookup for legacy data
+        const sessionToUuid = new Map<string, string>();
+        instances.forEach(inst => sessionToUuid.set(inst.sessionId, inst.id));
+
         const countMap = new Map<string, number>();
-        messageCountsByInstance.forEach(item => {
-            if (item.assignedInstanceId) {
-                countMap.set(item.assignedInstanceId, item._count.id);
-            }
+
+        // DispatchLog uses Instance UUID directly
+        dispatchCountsByInstance.forEach(item => {
+            countMap.set(item.instanceId, item._count.id);
+        });
+
+        // CampaignLead.assignedInstanceId stores sessionId — resolve to UUID
+        legacyCountsByInstance.forEach(item => {
+            if (!item.assignedInstanceId) return;
+            const uuid = sessionToUuid.get(item.assignedInstanceId) || item.assignedInstanceId;
+            const existing = countMap.get(uuid) || 0;
+            countMap.set(uuid, Math.max(existing, item._count.id));
         });
 
         const history = instances.map(instance => {
@@ -141,7 +151,6 @@ export class StatsController {
                 instanceName: instance.name,
                 status: instance.status,
                 messagesSent: count,
-                // [COMPATIBILITY] Frontend expects these fields, return null/defaults
                 connectedAt: instance.status === 'CONNECTED' ? 'Online' : '-',
                 disconnectedAt: instance.status === 'DISCONNECTED' ? 'Offline' : '-',
                 rawStart: null,
@@ -149,12 +158,11 @@ export class StatsController {
             };
         });
 
-        // Sort by Messages Sent (Desc)
         history.sort((a, b) => b.messagesSent - a.messagesSent);
 
         return {
             totalSent,
-            totalSentAllTime, // [NEW] Return
+            totalSentAllTime,
             activeInstances,
             totalInstances,
             totalCampaigns,

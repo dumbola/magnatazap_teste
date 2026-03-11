@@ -37,6 +37,15 @@ interface InstanceHistory {
 // --- Mock Data Removed (Using Real Backend Data) ---
 // const generateMockData = ...
 
+function getToken() {
+    if (typeof window !== 'undefined') {
+        const local = localStorage.getItem('token');
+        if (local) return local;
+        return document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+    }
+    return null;
+}
+
 export default function DashboardPage() {
     // --- State ---
     // Range State: "from" is always set (default today), "to" is optional.
@@ -83,8 +92,11 @@ export default function DashboardPage() {
                 const startISO = startOfDay(range.from).toISOString();
                 const endISO = endOfDay(range.to || range.from).toISOString();
 
-                // [FIX] Include JWT token in Authorization header
-                const token = localStorage.getItem('token');
+                const token = getToken();
+                if (!token) {
+                    console.warn('[Dashboard] No auth token found');
+                    return;
+                }
                 const res = await fetch(`${API_URL}/stats?start=${startISO}&end=${endISO}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -428,10 +440,4 @@ export default function DashboardPage() {
         </div>
     );
 }
-
-// Ensure MoneyRain is imported at top.
-// Since I'm replacing the whole return, I should be careful.
-// I'll assume I need to add the import at the top as well. This tool replaces a BLOCK.
-// Ah, the tool replaces lines. I need to make sure I import MoneyRain.
-// I'll grab imports too.
 
