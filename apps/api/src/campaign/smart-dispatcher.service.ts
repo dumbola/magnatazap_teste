@@ -89,7 +89,7 @@ export class SmartDispatcherService {
             // [ROTATING PROXY SUPPORT] 
             // If we detect a known rotating proxy provider, we TRUST that the Sticky IP logic
             // (sessid-INSTANCE_NAME) is doing its job. Therefore, effectively every instance has a unique IP.
-            const isRotating = proxyConfig.includes('oxylabs.io') ||
+            const isRotating = proxyConfig.includes('webshare.io') ||
                 proxyConfig.includes('brightdata') ||
                 proxyConfig.includes('luminati') ||
                 proxyConfig.includes('smartproxy');

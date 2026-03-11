@@ -119,11 +119,10 @@ export class WhatsappService implements OnModuleInit {
                         this.logger.warn(`[TIMEOUT CHECK] ${sessionId} | Status: ${status} | Age: ${age / 1000}s`);
 
                         if (age > 120000) {
-                            this.logger.warn(`[TIMEOUT] ⏳ Connection Stuck/Looping for ${sessionId} (> 2m). Forcing KILL.`);
+                            this.logger.warn(`[AUTO-CLEANUP] 🗑️ Connection Stuck/Looping for ${sessionId} (> 2m). Deleting instance.`);
                             this.updateStatus(sessionId, 'DISCONNECTED');
                             this.connectionStartTimes.delete(sessionId);
-                            await this.prisma.instance.update({ where: { sessionId }, data: { status: 'DISCONNECTED' } }).catch(() => { });
-                            await this.deleteSession(sessionId, true);
+                            await this.deleteSession(sessionId, false);
                         }
                     } else {
                         this.logger.warn(`[TIMEOUT CHECK] ${sessionId} | Status: ${status} | No Start Time - Skipping`);
@@ -132,15 +131,25 @@ export class WhatsappService implements OnModuleInit {
 
                 // [STRICT] 3. Target: Connected locally but Dead Socket
                 if (status === 'CONNECTED' && client?.socket && !client.socket.user) {
-                    this.logger.warn(`[SWEEPER] 🧟 Zombie Detected: ${sessionId}. (Status: CONNECTED, User: NULL). Killing...`);
+                    this.logger.warn(`[AUTO-CLEANUP] 🗑️ Zombie Detected: ${sessionId}. (Status: CONNECTED, User: NULL). Deleting instance.`);
                     this.updateStatus(sessionId, 'DISCONNECTED');
-                    await this.prisma.instance.update({
-                        where: { sessionId },
-                        data: { status: 'DISCONNECTED' }
-                    }).catch(e => this.logger.error(`[SWEEPER] DB Update Failed: ${e.message}`));
-                    // Force kill (Keep Record)
-                    await this.deleteSession(sessionId, true);
+                    await this.deleteSession(sessionId, false);
                 }
+            }
+
+            // [STRICT] 4. DB Sweep: Remove instâncias DISCONNECTED órfãs (sem sessão ativa em memória)
+            try {
+                const orphans = await this.prisma.instance.findMany({
+                    where: { status: 'DISCONNECTED' }
+                });
+                for (const orphan of orphans) {
+                    if (!this.sessions.has(orphan.sessionId)) {
+                        this.logger.warn(`[AUTO-CLEANUP] 🗑️ Orphan instance ${orphan.name} (${orphan.sessionId}) found DISCONNECTED in DB with no active session. Deleting.`);
+                        await this.deleteSession(orphan.sessionId, false);
+                    }
+                }
+            } catch (e) {
+                this.logger.error(`[AUTO-CLEANUP] DB Sweep failed: ${e.message}`);
             }
         }, 30000); // Check every 30 seconds
     }
@@ -674,19 +683,10 @@ export class WhatsappService implements OnModuleInit {
 
     // [HELPER] Finalize Disconnect (Extracted for Debounce)
     private async finalizeDisconnect(sessionId: string, reason: string, metadata: any, name: string) {
-        try {
-            await this.prisma.instance.update({
-                where: { sessionId },
-                data: { status: 'DISCONNECTED' },
-            });
-        } catch (err) {
-            if (err.code !== 'P2025') this.logger.error(`Failed to update instance status: ${err.message}`);
-        }
-
-        // Log Disconnection Event (End of Session)
+        // Log Disconnection Event before deletion
         await this.prisma.connectionLog.create({
             data: {
-                instanceName: sessionId, // Storing SessionID
+                instanceName: sessionId,
                 status: 'DISCONNECTED',
                 reason: reason,
                 metadata: metadata,
@@ -694,11 +694,10 @@ export class WhatsappService implements OnModuleInit {
             }
         }).catch(e => this.logger.error(`Failed to log DISCONNECT: ${e.message}`));
 
-        if (['LOGGED_OUT', 'BANNED'].includes(reason)) {
-            this.logger.warn(`[AUTO-FIX] Fatal Auth Error ${reason}. Wiping session files for ${sessionId}.`);
-            // [RULE 3] Explicit Delete on Fatal Error (Files + DB)
-            await this.deleteSession(sessionId, false);
-        }
+        // [AUTO-CLEANUP] Instância que não recuperou em 20s é considerada morta.
+        // Excluir sessão + registro do DB para manter o dashboard limpo.
+        this.logger.warn(`[AUTO-CLEANUP] 🗑️ Removing dead instance ${name} (${sessionId}). Reason: ${reason}`);
+        await this.deleteSession(sessionId, false);
     }
 
     /**

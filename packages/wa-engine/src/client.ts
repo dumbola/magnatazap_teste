@@ -185,41 +185,35 @@ export class WhatsappClient {
                     const { HttpsProxyAgent } = require('https-proxy-agent');
                     const url = new URL(proxyUrl);
 
-                    // [ROTAÇÃO UNIVERSAL] Suporte a Oxylabs e BrightData
+                    // [ROTAÇÃO UNIVERSAL] Suporte a Webshare e BrightData
                     if (shouldRotate) {
-                        // [FIX] Rotação Inteligente de Session ID (Evita IP preso eternamente)
-                        // Gera um novo hash a cada 10 minutos ou a cada tentativa de retry explícita
-                        const timestampKey = Math.floor(Date.now() / (1000 * 60 * 10));
-                        const seed = `${this.config.name}-${timestampKey}`;
+                        const isWebshare = url.hostname.includes('webshare.io');
 
-                        // Simple robust hash to turn string into 5-digit ID
-                        let hash = 0;
-                        for (let i = 0; i < seed.length; i++) {
-                            hash = ((hash << 5) - hash) + seed.charCodeAt(i);
-                            hash |= 0; // Convert to 32bit integer
-                        }
-                        const randomId = Math.abs(hash) % 1000000;
-
-                        this.logger.info(`[STICKY IP] Gerado Session ID: ${randomId} para instância ${seed}`);
-
-                        const isOxylabs = url.hostname.includes('oxylabs.io');
-
-                        if (isOxylabs) {
-                            // Oxylabs Logic: sessid-ID
-                            if (url.username.includes('sessid-')) {
-                                url.username = url.username.replace(/sessid-[a-zA-Z0-9]+/, `sessid-${randomId}`);
-                            } else {
-                                url.username = `${url.username}-sessid-${randomId}`;
-                            }
+                        if (isWebshare) {
+                            // Webshare: NÃO modifica o username. A rotação é controlada pelo painel do Webshare.
+                            // Cada nova conexão recebe um IP diferente automaticamente.
+                            this.logger.info(`[PROXY] Webshare Rotating - usando credenciais originais (rotação automática)`);
                         } else {
-                            // Bright Data Logic: session-ID
+                            // BrightData/Outros: Injeção de Session ID no username para sticky IP
+                            const timestampKey = Math.floor(Date.now() / (1000 * 60 * 10));
+                            const seed = `${this.config.name}-${timestampKey}`;
+
+                            let hash = 0;
+                            for (let i = 0; i < seed.length; i++) {
+                                hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+                                hash |= 0;
+                            }
+                            const randomId = Math.abs(hash) % 1000000;
+
+                            this.logger.info(`[STICKY IP] Gerado Session ID: ${randomId} para instância ${seed}`);
+
                             if (url.username.includes('-session-')) {
                                 url.username = url.username.replace(/-session-[^-:]+/, `-session-${randomId}`);
                             } else {
                                 url.username = url.username ? `${url.username}-session-${randomId}` : `session-${randomId}`;
                             }
+                            this.logger.info(`[PROXY ROTATION] Novo Túnel (BRD - Sticky): ${url.username}`);
                         }
-                        this.logger.info(`[PROXY ROTATION] Novo Túnel (${isOxylabs ? 'Oxy' : 'BRD'} - Sticky): ${url.username}`);
                     }
 
                     const rotatedProxyUrl = url.toString();

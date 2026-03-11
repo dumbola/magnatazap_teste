@@ -13,7 +13,7 @@ export class ProxyTurboService implements OnApplicationBootstrap {
     private readonly REFILL_INTERVAL = 2000;
 
     onApplicationBootstrap() {
-        this.logger.log('[TURBO] 🚀 Starting Universal Engine (Oxylabs/BrightData Ready)...');
+        this.logger.log('[TURBO] 🚀 Starting Universal Engine (Webshare/BrightData Ready)...');
         this.refillPool();
         setInterval(() => this.refillPool(), this.REFILL_INTERVAL);
     }
@@ -110,20 +110,14 @@ export class ProxyTurboService implements OnApplicationBootstrap {
             if (!url.protocol.startsWith('http')) url.protocol = 'http:';
 
             const randomId = Math.floor(Math.random() * 1000000);
-            const isOxylabs = url.hostname.includes('oxylabs.io');
+            const isWebshare = url.hostname.includes('webshare.io');
 
-            // [LÓGICA UNIVERSAL DE INJEÇÃO]
-            if (isOxylabs) {
-                // Oxylabs usa: customer-username-sessid-ID
-                if (url.username.includes('sessid-')) {
-                    // Substitui ID existente
-                    url.username = url.username.replace(/sessid-[a-zA-Z0-9]+/, `sessid-${randomId}`);
-                } else {
-                    // Adiciona novo ID
-                    url.username = `${url.username}-sessid-${randomId}`;
-                }
+            // [LÓGICA UNIVERSAL DE INJEÇÃO DE SESSÃO]
+            if (isWebshare) {
+                // Webshare: NÃO modifica o username. Rotação é automática pelo provedor.
+                this.logger.debug(`[TURBO] Webshare detected - using original credentials (auto-rotate)`);
             } else {
-                // Bright Data/Outros usa: user-zone-session-ID
+                // Bright Data/Outros: Injeção de Session ID no username
                 if (url.username.includes('-session-')) {
                     url.username = url.username.replace(/-session-[^-:]+/, `-session-${randomId}`);
                 } else {
@@ -132,8 +126,7 @@ export class ProxyTurboService implements OnApplicationBootstrap {
             }
 
             const rotatedUrl = url.toString();
-            // ID para logs internos
-            const id = isOxylabs ? `sessid-${randomId}` : `session-${randomId}`;
+            const id = isWebshare ? `ws-${randomId}` : `session-${randomId}`;
 
             // Cria o Agente (Configuração Limpa, o Baileys abre o socket)
             const agent = new HttpsProxyAgent(rotatedUrl, {

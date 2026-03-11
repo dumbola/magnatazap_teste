@@ -77,38 +77,6 @@ services:
       - api
       - web
 
-  proxy-manager:
-    image: luminati/luminati-proxy
-    restart: always
-    ports:
-      - "22999:22999" # Admin Interface
-      - "24000:24000" # Proxy Port
-    environment:
-      - LUMINATI_CUSTOMER=hl_b1aa2a1f
-      - LUMINATI_ZONE=5k
-      - LUMINATI_PASSWORD=benxs7ng2f9d
-    # [AUTO-CONFIG] Start with port 24000 configured for the zone
-    command:
-      - luminati-proxy
-      - "--port"
-      - "24000"
-      - "--zone"
-      - "5k"
-      - "--customer"
-      - "hl_b1aa2a1f"
-      - "--password"
-      - "benxs7ng2f9d"
-      - "--whitelist_ips"
-      - "0.0.0.0/0"
-      - "--www_whitelist_ips"
-      - "0.0.0.0/0"
-      - "--log"
-      - "info"
-      - "--www"
-      - "22999"
-      - "--proxy_type"
-      - "http"
-
 volumes:
   postgres_data:
   redis_data_v3:
