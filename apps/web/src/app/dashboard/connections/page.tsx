@@ -14,6 +14,7 @@ interface Instance {
     phone: string | null;
     status: string;
     updatedAt: string;
+    isHumanized?: boolean;
 }
 
 export default function ConnectionsPage() {
@@ -348,7 +349,7 @@ export default function ConnectionsPage() {
                         const codeAvailable = availableCodes[inst.name];
                         const createdTime = creationTimes[inst.name] || 0;
                         const isStuck = connecting && !codeAvailable && (Date.now() - createdTime > 30000);
-                        const isModified = modifiedInstances.has(inst.name); // [NEW] Visual Feedback
+                        const isHumanized = inst.isHumanized || modifiedInstances.has(inst.name);
 
                         return (
                             <div
@@ -359,9 +360,9 @@ export default function ConnectionsPage() {
                                     ${selectedInstances.has(inst.name) ? 'ring-2 ring-neon-green bg-neon-green/5' : ''}
                                 `}
                             >
-                                {/* [NEW] Modification Badge */}
-                                {isModified && (
-                                    <div className="absolute top-0 right-0 -mt-2 -mr-2 bg-neon-green text-black rounded-full p-1.5 shadow-lg border-2 border-black z-20 animate-in zoom-in spin-in-3 duration-500">
+                                {/* Humanized Badge (Verified) */}
+                                {isHumanized && (
+                                    <div className="absolute top-0 right-0 -mt-2 -mr-2 bg-neon-green text-black rounded-full p-1.5 shadow-lg border-2 border-black z-20" title="Perfil humanizado">
                                         <ShieldCheck className="w-5 h-5" />
                                     </div>
                                 )}

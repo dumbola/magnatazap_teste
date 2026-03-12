@@ -43,6 +43,7 @@ model Instance {
   warmupNumbers String[] @default([]) // [NEW] Anti-Ban safe contacts list
   lastKnownIp String?    // [NEW] Public IP seen by the world
   lastIpCheck DateTime?  // [NEW] When the IP was last checked
+  isHumanized Boolean    @default(false)
   userId      String?
   user        User?      @relation(fields: [userId], references: [id])
   campaigns   Campaign[] // [NEW] N:N relation

@@ -80,19 +80,16 @@ export class InstanceController {
 
             return {
                 id: instance.id,
-                name: instance.name, // Visual Name
+                name: instance.name,
                 sessionId: instance.sessionId,
                 phone: instance.phone,
-                // [NEW] Proxy Data
                 proxyIp: instance.lastKnownIp || 'Checking...',
                 lastCheck: instance.lastIpCheck,
-                // Status
                 status: finalStatus,
                 health: health,
                 isUnstable,
-                // Stats
+                isHumanized: instance.isHumanized,
                 sentCount,
-                // Metadata
                 proxyConfig: instance.proxyConfig
             };
         });

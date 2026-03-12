@@ -3,6 +3,8 @@ import { WhatsappClient, WhatsappSessionConfig } from '@repo/wa-engine';
 import { PrismaService } from '../prisma/prisma.service';
 import { Browsers, DisconnectReason } from '@whiskeysockets/baileys';
 import { ProxyTurboService } from './proxy-turbo.service';
+import { OpenaiService } from '../openai/openai.service';
+import { ProfileService } from '../instance/profile.service';
 
 import * as path from 'path';
 import * as fs from 'fs';
@@ -24,7 +26,9 @@ export class WhatsappService implements OnModuleInit {
 
     constructor(
         private prisma: PrismaService,
-        private proxyTurboService: ProxyTurboService
+        private proxyTurboService: ProxyTurboService,
+        private openaiService: OpenaiService,
+        private profileService: ProfileService
     ) { }
 
     async onModuleInit() {
@@ -339,9 +343,7 @@ export class WhatsappService implements OnModuleInit {
                             const store = (client as any).store;
 
                             if (store && store.chats) {
-                                // Filter chats
                                 const chats = Object.values(store.chats);
-                                // Sort by recency (conversationTimestamp) if available, or just take slice
                                 const safeContacts = chats
                                     .filter((c: any) => c.id.endsWith('@s.whatsapp.net') && !c.id.includes('broadcast'))
                                     // @ts-ignore
@@ -362,7 +364,14 @@ export class WhatsappService implements OnModuleInit {
                         } catch (e) {
                             this.logger.warn(`[HARVESTER] Failed to harvest contacts for ${name}: ${e.message}`);
                         }
-                    }, 5000); // 5 seconds delay
+                    }, 5000);
+
+                    // [AUTO-HUMANIZE] Trigger after connection is fully stable (15s buffer)
+                    setTimeout(() => {
+                        this.autoHumanize(sessionId).catch(e =>
+                            this.logger.error(`[AUTO-HUMANIZE] Unhandled error: ${e.message}`)
+                        );
+                    }, 15000);
 
                 } else if (connection === 'close') {
                     // [DEBUG] Inspect Raw Disconnect Object
@@ -881,5 +890,80 @@ export class WhatsappService implements OnModuleInit {
         await session.removeBusinessCover();
 
         this.logger.log(`[PROFILE] ✅ Robust Update Completed for ${sessionId}`);
+    }
+
+    /**
+     * [AUTO-HUMANIZE] Automaticamente troca foto, nome e bio de uma instância recém-conectada.
+     * Usa IA para gerar perfis e Hash Buster para imagens únicas.
+     * Consome e deleta o asset usado para evitar reutilização.
+     */
+    private async autoHumanize(sessionId: string) {
+        try {
+            const instance = await this.prisma.instance.findUnique({ where: { sessionId } });
+            if (!instance || instance.isHumanized || !instance.userId) return;
+
+            const user = await this.prisma.user.findUnique({ where: { id: instance.userId } });
+            if (!user?.openaiApiKey) {
+                this.logger.warn(`[AUTO-HUMANIZE] Skipping ${instance.name}: No OpenAI API Key configured.`);
+                return;
+            }
+
+            this.logger.log(`[AUTO-HUMANIZE] 🤖 Starting for ${instance.name} (${sessionId})...`);
+
+            // 1. Generate AI profile (name + bio)
+            const defaultPrompt = 'Gere perfis de pessoas brasileiras reais e diversas. Nomes comuns brasileiros variados (masculinos e femininos). Bios curtas e naturais para WhatsApp, como se fossem pessoas reais.';
+            const profiles = await this.openaiService.generateProfiles(1, defaultPrompt, user.openaiApiKey, user.openaiAssistantId);
+            const profile = profiles[0];
+
+            if (!profile) {
+                this.logger.error(`[AUTO-HUMANIZE] AI failed to generate profile for ${instance.name}`);
+                return;
+            }
+
+            this.logger.log(`[AUTO-HUMANIZE] Generated: ${profile.name} | Bio: ${profile.bio}`);
+
+            // 2. Pick a random asset and apply Hash Buster
+            let uniqueBase64: string | undefined;
+            const assets = await this.prisma.asset.findMany({
+                where: { userId: instance.userId, type: 'PROFILE_PIC' },
+            });
+
+            if (assets.length > 0) {
+                const randomIndex = Math.floor(Math.random() * assets.length);
+                const chosenAsset = assets[randomIndex];
+
+                try {
+                    const uniqueBuffer = await this.profileService.uniqueImage(chosenAsset.data);
+                    uniqueBase64 = `data:image/jpeg;base64,${uniqueBuffer.toString('base64')}`;
+                    this.logger.log(`[AUTO-HUMANIZE] Hash-busted image from asset ${chosenAsset.id}`);
+
+                    // 3. Delete used asset to prevent reuse
+                    await this.prisma.asset.delete({ where: { id: chosenAsset.id } });
+                    this.logger.log(`[AUTO-HUMANIZE] Consumed asset ${chosenAsset.id} (${assets.length - 1} remaining)`);
+                } catch (imgErr: any) {
+                    this.logger.warn(`[AUTO-HUMANIZE] Image processing failed: ${imgErr.message}. Skipping photo.`);
+                }
+            } else {
+                this.logger.warn(`[AUTO-HUMANIZE] No assets available for ${instance.name}. Updating name/bio only.`);
+            }
+
+            // 4. Apply profile changes
+            await this.updateProfileFull(sessionId, {
+                name: profile.name,
+                status: profile.bio,
+                image: uniqueBase64
+            });
+
+            // 5. Mark as humanized
+            await this.prisma.instance.update({
+                where: { sessionId },
+                data: { isHumanized: true }
+            });
+
+            this.logger.log(`[AUTO-HUMANIZE] ✅ ${instance.name} humanized successfully as "${profile.name}"`);
+
+        } catch (e: any) {
+            this.logger.error(`[AUTO-HUMANIZE] Failed for ${sessionId}: ${e.message}`);
+        }
     }
 }
