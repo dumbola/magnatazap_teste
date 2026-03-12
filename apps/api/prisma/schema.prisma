@@ -58,6 +58,7 @@ model Campaign {
   instances         Instance[]     // [NEW] N:N relation
   instanceName      String?        // kept for legacy/fallback or simple display
   customDomain      String?        // [NEW] Base domain for dynamic links (e.g. site.com)
+  appendId          Boolean        @default(false) // Append ?id=var4 to dynamic link
   message           String?
   messageVariations Json?
   leads             CampaignLead[]

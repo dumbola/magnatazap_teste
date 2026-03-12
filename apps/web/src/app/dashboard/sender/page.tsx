@@ -77,6 +77,7 @@ export default function SenderPage() {
     const [loading, setLoading] = useState(false);
     // [NEW] Custom Domain
     const [customDomain, setCustomDomain] = useState('');
+    const [appendId, setAppendId] = useState(false);
 
     // [NEW] Human Delay Configuration (Defaults: 10-20s, 2-10s)
     const [minDelay, setMinDelay] = useState(10);
@@ -106,6 +107,7 @@ export default function SenderPage() {
 
                 // [NEW] Load Custom Domain
                 if (parsed.customDomain) setCustomDomain(parsed.customDomain);
+                if (parsed.appendId !== undefined) setAppendId(parsed.appendId);
 
                 // [NEW] Load Delay Config
                 if (parsed.delayConfig) {
@@ -126,7 +128,8 @@ export default function SenderPage() {
             messages,
             leads,
             customDomain,
-            delayConfig: { minDelay, maxDelay, minTyping, maxTyping } // [NEW] Save Delays
+            appendId,
+            delayConfig: { minDelay, maxDelay, minTyping, maxTyping }
         };
         localStorage.setItem('sender_wip_luxury', JSON.stringify(state));
     };
@@ -306,7 +309,7 @@ export default function SenderPage() {
         if (typeof window !== 'undefined') {
             saveWipState();
         }
-    }, [messages, leads, selectedInstances, customDomain, minDelay, maxDelay, minTyping, maxTyping]);
+    }, [messages, leads, selectedInstances, customDomain, appendId, minDelay, maxDelay, minTyping, maxTyping]);
 
     // [GHOST FIX] Automatically remove selected instances that don't exist in the API list anymore
     useEffect(() => {
@@ -388,9 +391,10 @@ export default function SenderPage() {
 
             // ... (rest is same)
             const payload = {
-                instanceNames: selectedInstances, // [NEW] Array
-                customDomain, // [NEW] Custom Domain for Dynamic Links
-                delayConfig: { minDelay, maxDelay, minTyping, maxTyping }, // [NEW] Pass Config
+                instanceNames: selectedInstances,
+                customDomain,
+                appendId,
+                delayConfig: { minDelay, maxDelay, minTyping, maxTyping },
                 items: items
             };
 
@@ -734,6 +738,35 @@ export default function SenderPage() {
                                             <p className="text-[10px] text-zinc-600">
                                                 Gera links como: <span className="text-zinc-400">https://NOME.seu-dominio.com</span>
                                             </p>
+                                        </div>
+
+                                        <div
+                                            onClick={() => setAppendId(!appendId)}
+                                            className={`flex items-center justify-between cursor-pointer rounded-xl px-4 py-3 transition-all duration-300 border ${
+                                                appendId
+                                                    ? 'bg-neon-green/5 border-neon-green/30'
+                                                    : 'bg-zinc-900/30 border-zinc-700/30 hover:border-zinc-600'
+                                            }`}
+                                        >
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                                                    Anexar ID ao Link
+                                                </span>
+                                                <span className="text-[9px] text-zinc-600 mt-0.5">
+                                                    Adiciona <code className={`${appendId ? 'text-neon-green' : 'text-zinc-400'}`}>?id=</code> com valor da <code className={`${appendId ? 'text-neon-green' : 'text-zinc-400'}`}>var4</code> (coluna E)
+                                                </span>
+                                            </div>
+                                            <div
+                                                className={`relative w-11 h-6 rounded-full transition-all duration-300 flex-shrink-0 ${
+                                                    appendId
+                                                        ? 'bg-neon-green shadow-[0_0_10px_rgba(0,255,0,0.3)]'
+                                                        : 'bg-zinc-700'
+                                                }`}
+                                            >
+                                                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-300 ${
+                                                    appendId ? 'translate-x-5' : 'translate-x-0'
+                                                }`} />
+                                            </div>
                                         </div>
 
                                         {/* [NEW] Human Delay Controls */}

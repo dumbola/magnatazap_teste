@@ -323,6 +323,13 @@ export class CampaignProcessor extends WorkerHost {
                 } else {
                     dynamicLink = `https://${domain}/`;
                 }
+
+                const shouldAppendId = campaignConfig?.appendId;
+                if (shouldAppendId && variables && variables['var4']) {
+                    const idValue = String(variables['var4']).trim();
+                    const separator = dynamicLink.includes('?') ? '&' : '?';
+                    dynamicLink = `${dynamicLink.replace(/\/$/, '')}${separator}id=${idValue}`;
+                }
             }
 
             let finalMessage = message;

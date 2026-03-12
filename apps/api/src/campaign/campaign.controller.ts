@@ -41,6 +41,7 @@ export class CampaignController {
         instanceNames: string[]; // [NEW] Array
         instanceName?: string;   // Legacy fallback
         customDomain?: string;   // [NEW] Dynamic Link Base
+        appendId?: boolean;      // Append ?id=var4 to dynamic link
         messageVariations?: string[]; // [NEW] Anti-Ban Variations
         delayConfig?: { // [NEW] Human Delay Configuration
             minDelay: number;
@@ -91,7 +92,8 @@ export class CampaignController {
                     instances: {
                         connect: instances.map(i => ({ id: i.id }))
                     },
-                    customDomain: body.customDomain, // [NEW] Save Domain
+                    customDomain: body.customDomain,
+                    appendId: body.appendId || false,
                     message: previewMessage,
                     messageVariations: hasVariations ? body.messageVariations : undefined, // [NEW] Save Variations
 
