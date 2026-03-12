@@ -284,25 +284,25 @@ export default function DashboardPage() {
                         {/* Top Stats Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             <StatCard
-                                label="Total Geral Enviado"
-                                value={stats?.totalSentAllTime || 0}
+                                label="Disparos no Período"
+                                value={stats?.totalSent || 0}
                                 icon={MessageSquare}
                                 color="text-neon-green"
-                                subValue={`${stats?.totalSent || 0} neste período`}
+                                subValue={`${stats?.totalSentAllTime || 0} total geral`}
                             />
                             <StatCard
-                                label="Instâncias Ativas"
+                                label="Instâncias (período)"
                                 value={stats?.activeInstances || 0}
                                 icon={Smartphone}
                                 color="text-blue-400"
-                                subValue={`De ${stats?.totalInstances || 0} instaladas`}
+                                subValue={`${stats?.totalInstances || 0} com atividade`}
                             />
                             <StatCard
-                                label="Campanhas"
+                                label="Campanhas (período)"
                                 value={stats?.totalCampaigns || 0}
                                 icon={BarChart3}
                                 color="text-purple-400"
-                                subValue="Ativas/Criadas"
+                                subValue="com disparos"
                             />
                             <StatCard
                                 label="Status do Sistema"

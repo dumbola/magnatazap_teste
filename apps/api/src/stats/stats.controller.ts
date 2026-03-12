@@ -31,19 +31,19 @@ export class StatsController {
         }
 
         // Hybrid: query both DispatchLog (new) and CampaignLead (legacy)
+        // All metrics filtered by period (start/end)
         const [
             dispatchSentPeriod,
             dispatchSentAllTime,
             legacySentPeriod,
             legacySentAllTime,
-            activeInstances,
-            totalInstances,
-            totalCampaigns,
             dispatchChartRaw,
             legacyChartRaw,
             instances,
             dispatchCountsByInstance,
-            legacyCountsByInstance
+            legacyCountsByInstance,
+            campaignsInPeriod,
+            campaignIdsFromLeads
         ] = await Promise.all([
             this.prisma.dispatchLog.count({
                 where: { userId, status: 'SENT', sentAt: { gte: start, lte: end } }
@@ -56,15 +56,6 @@ export class StatsController {
             }),
             this.prisma.campaignLead.count({
                 where: { status: 'SENT', campaign: { userId } }
-            }),
-            this.prisma.instance.count({
-                where: { userId, status: 'CONNECTED' }
-            }),
-            this.prisma.instance.count({
-                where: { userId }
-            }),
-            this.prisma.campaign.count({
-                where: { userId }
             }),
             this.prisma.dispatchLog.findMany({
                 where: { userId, status: 'SENT', sentAt: { gte: start, lte: end } },
@@ -85,6 +76,16 @@ export class StatsController {
             }),
             this.prisma.campaignLead.groupBy({
                 by: ['assignedInstanceId'],
+                where: { status: 'SENT', sentAt: { gte: start, lte: end }, campaign: { userId } },
+                _count: { id: true }
+            }),
+            this.prisma.dispatchLog.groupBy({
+                by: ['campaignId'],
+                where: { userId, status: 'SENT', sentAt: { gte: start, lte: end }, campaignId: { not: null } },
+                _count: { id: true }
+            }),
+            this.prisma.campaignLead.groupBy({
+                by: ['campaignId'],
                 where: { status: 'SENT', sentAt: { gte: start, lte: end }, campaign: { userId } },
                 _count: { id: true }
             })
@@ -160,6 +161,21 @@ export class StatsController {
 
         history.sort((a, b) => b.messagesSent - a.messagesSent);
 
+        // Métricas filtradas pelo período
+        const totalInstances = countMap.size;
+        let activeInstances = 0;
+        const instanceIdsWithActivity = new Set(countMap.keys());
+        instances.forEach(inst => {
+            if (instanceIdsWithActivity.has(inst.id) && inst.status === 'CONNECTED') activeInstances++;
+        });
+
+        const campaignIdSet = new Set<string>();
+        campaignsInPeriod.forEach(c => { if (c.campaignId) campaignIdSet.add(c.campaignId); });
+        campaignIdsFromLeads.forEach(c => campaignIdSet.add(c.campaignId));
+        const totalCampaigns = campaignIdSet.size;
+
+        const historyFiltered = history.filter(h => h.messagesSent > 0);
+
         return {
             totalSent,
             totalSentAllTime,
@@ -168,7 +184,7 @@ export class StatsController {
             totalCampaigns,
             systemStatus: 'Online',
             chartData,
-            history
+            history: historyFiltered
         };
     }
 }
