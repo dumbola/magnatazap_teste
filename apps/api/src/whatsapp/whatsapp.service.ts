@@ -410,11 +410,12 @@ export class WhatsappService implements OnModuleInit {
 
                     // [HISTORY FIX] Debounce Disconnects (Instability Filter)
                     // If FATAL (Banned/LoggedOut), log immediately.
-                    // If network error, wait 20s to see if it recovers.
+                    // If network error, wait 45s to see if it recovers (proxy/slow networks need more time).
                     if (['LOGGED_OUT', 'BANNED'].includes(reason)) {
                         await this.finalizeDisconnect(sessionId, reason, metadata, name);
                     } else {
-                        this.logger.warn(`[HISTORY] ⏳ Instability Detected for ${sessionId}. Waiting 20s before marking as DISCONNECTED...`);
+                        const gracePeriodMs = 45000; // 45s - was 20s; Baileys reconnection under load can take longer
+                        this.logger.warn(`[HISTORY] ⏳ Instability Detected for ${sessionId}. Waiting ${gracePeriodMs / 1000}s before marking as DISCONNECTED...`);
 
                         // Clear existing if any (refresh timer)
                         if (this.pendingDisconnects.has(sessionId)) clearTimeout(this.pendingDisconnects.get(sessionId));
@@ -423,7 +424,7 @@ export class WhatsappService implements OnModuleInit {
                             this.logger.warn(`[HISTORY] ❌ Instability Timeout for ${sessionId}. Marking as DISCONNECTED.`);
                             this.pendingDisconnects.delete(sessionId);
                             await this.finalizeDisconnect(sessionId, reason, metadata, name);
-                        }, 20000); // 20 Seconds grace period
+                        }, gracePeriodMs);
 
                         this.pendingDisconnects.set(sessionId, timeout);
                     }
@@ -895,7 +896,7 @@ export class WhatsappService implements OnModuleInit {
     /**
      * [AUTO-HUMANIZE] Automaticamente troca foto, nome e bio de uma instância recém-conectada.
      * Usa IA para gerar perfis e Hash Buster para imagens únicas.
-     * Consome e deleta o asset usado para evitar reutilização.
+     * Assets permanecem no banco - Hash Buster já garante unicidade a cada uso.
      */
     private async autoHumanize(sessionId: string) {
         try {

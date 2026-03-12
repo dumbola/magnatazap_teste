@@ -295,20 +295,19 @@ export class SmartDispatcherService {
     reportFailure(campaignId: string, instanceId: string, reason: 'TIMEOUT' | 'ERROR' | 'DISCONNECTED' = 'ERROR') {
         const state = this.campaignStates.get(campaignId);
         if (state) {
-            // [HARDENING] Cooldown Variável (Dispatcher 3.0)
-            // - TIMEOUT (Stabilization): 30s -> Deixa o processador tentar outro, mas não bane por muito tempo.
-            // - ERROR (Send Fail): 120s -> Instância instável, geladeira severa.
-            // - DISCONNECTED: 120s -> Instância caiu, precisa de tempo para reconnect/backoff.
+            // [HARDENING] Cooldown Variável - Reduzido para recuperação mais rápida
+            // - TIMEOUT (Stabilization): 25s -> Instância lenta, mas não morta.
+            // - ERROR / DISCONNECTED: 60s -> Antes 2min; 1min permite retry mais cedo quando rede volta.
 
             let cooldownMs = 60000; // Default 1m
 
             switch (reason) {
                 case 'TIMEOUT':
-                    cooldownMs = 30000; // 30s
+                    cooldownMs = 25000; // 25s
                     break;
                 case 'ERROR':
                 case 'DISCONNECTED':
-                    cooldownMs = 120000; // 2 Minutes
+                    cooldownMs = 60000; // 1 minute (was 2 min - throughput was dropping too long)
                     break;
             }
 

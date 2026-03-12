@@ -359,11 +359,9 @@ export class CampaignProcessor extends WorkerHost {
                 
                 await new Promise(r => setTimeout(r, typingDuration));
 
-                // 2. Random Delay (Jitter) before sending
-                const minDelay = campaignConfig.minDelay || 5; 
-                const maxDelay = campaignConfig.maxDelay || 15;
-                const jitter = this.getRandomFloatingDelay(minDelay, maxDelay);
-                await new Promise(r => setTimeout(r, jitter));
+                // 2. Micro-pause (Jitter) before sending - 2-5s human-like breath (avoids hardcoded 5-15s stacking)
+                const jitterMs = this.getRandomFloatingDelay(2, 5);
+                await new Promise(r => setTimeout(r, jitterMs));
 
                 // 3. Send Message
                 if (!client?.socket) throw new Error('Socket disconnected during delay');
