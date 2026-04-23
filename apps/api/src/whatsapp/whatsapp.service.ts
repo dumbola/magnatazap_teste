@@ -265,17 +265,20 @@ export class WhatsappService implements OnModuleInit {
 
         // [CONFIG] 3. Apenas Webshare: país padrão (WEBSHARE_DEFAULT_COUNTRY) se ainda sem proxy
         if (!sessionConfig.proxyUrl) {
-            const fallback = getDefaultWebshareProxyUrl();
+            const systemProxies = (process.env.WA_PROXY_URL || '').split(',').map(p => p.trim()).filter(Boolean);
+            const proxyFromEnv = systemProxies.length > 0 ? systemProxies[Math.floor(Math.random() * systemProxies.length)] : null;
+            
+            const fallback = getDefaultWebshareProxyUrl() || proxyFromEnv;
             if (fallback) {
                 sessionConfig.proxyUrl = fallback;
                 sessionConfig.clientCountry = sessionConfig.clientCountry
                     || (process.env.WEBSHARE_DEFAULT_COUNTRY || 'BR');
                 this.logger.log(
-                    `[CONFIG] Webshare padrão (${sessionConfig.clientCountry}) → ${sessionId}`
+                    `[CONFIG] Proxy padrão selecionado → ${sessionId}`
                 );
             } else {
                 this.logger.warn(
-                    `[CONFIG] WEBSHARE_WA_DSN em falta: ${sessionId} fica em DIRECT (sem proxy).`
+                    `[CONFIG] Nenhuma proxy configurada (WA_PROXY_URL ou WEBSHARE_WA_DSN em falta): ${sessionId} fica em DIRECT (sem proxy).`
                 );
             }
         }

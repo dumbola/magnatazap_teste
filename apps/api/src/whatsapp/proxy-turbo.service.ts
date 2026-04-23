@@ -96,9 +96,13 @@ export class ProxyTurboService implements OnApplicationBootstrap {
 
     public createUniversalAgent(): { id: string, agent: any, createdAt: number } | null {
         try {
-            const urlString = getDefaultWebshareProxyUrl();
+            const systemProxies = (process.env.WA_PROXY_URL || '').split(',').map(p => p.trim()).filter(Boolean);
+            const proxyFromEnv = systemProxies.length > 0 ? systemProxies[Math.floor(Math.random() * systemProxies.length)] : null;
+            
+            const urlString = getDefaultWebshareProxyUrl() || proxyFromEnv;
+            
             if (!urlString) {
-                this.logger.error('[TURBO] WEBSHARE_WA_DSN / WEBSHARE_DEFAULT_COUNTRY em falta');
+                this.logger.error('[TURBO] Nenhuma configuração de Proxy encontrada (WA_PROXY_URL ou WEBSHARE_WA_DSN em falta)');
                 return null;
             }
             // Log masked URL for debug
