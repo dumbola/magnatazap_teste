@@ -207,35 +207,26 @@ export class WhatsappClient {
                     const { HttpsProxyAgent } = require('https-proxy-agent');
                     const url = new URL(proxyUrl);
 
-                    // [ROTAÇÃO UNIVERSAL] Suporte a Webshare e BrightData
+                    // [ROTAÇÃO UNIVERSAL E STICKY IP] Suporte a Webshare, BrightData e Oxylabs
                     if (shouldRotate) {
-                        const isWebshare = url.hostname.includes('webshare.io');
+                        const timestampKey = Math.floor(Date.now() / (1000 * 60 * 10));
+                        const seed = `${this.config.name}-${timestampKey}`;
 
-                        if (isWebshare) {
-                            // Webshare: NÃO modifica o username. A rotação é controlada pelo painel do Webshare.
-                            // Cada nova conexão recebe um IP diferente automaticamente.
-                            this.logger.info(`[PROXY] Webshare Rotating - usando credenciais originais (rotação automática)`);
-                        } else {
-                            // BrightData/Outros: Injeção de Session ID no username para sticky IP
-                            const timestampKey = Math.floor(Date.now() / (1000 * 60 * 10));
-                            const seed = `${this.config.name}-${timestampKey}`;
-
-                            let hash = 0;
-                            for (let i = 0; i < seed.length; i++) {
-                                hash = ((hash << 5) - hash) + seed.charCodeAt(i);
-                                hash |= 0;
-                            }
-                            const randomId = Math.abs(hash) % 1000000;
-
-                            this.logger.info(`[STICKY IP] Gerado Session ID: ${randomId} para instância ${seed}`);
-
-                            if (url.username.includes('-session-')) {
-                                url.username = url.username.replace(/-session-[^-:]+/, `-session-${randomId}`);
-                            } else {
-                                url.username = url.username ? `${url.username}-session-${randomId}` : `session-${randomId}`;
-                            }
-                            this.logger.info(`[PROXY ROTATION] Novo Túnel (BRD - Sticky): ${url.username}`);
+                        let hash = 0;
+                        for (let i = 0; i < seed.length; i++) {
+                            hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+                            hash |= 0;
                         }
+                        const randomId = Math.abs(hash) % 1000000;
+
+                        this.logger.info(`[STICKY IP] Gerado Session ID: ${randomId} para instância ${seed}`);
+
+                        if (url.username.includes('-session-')) {
+                            url.username = url.username.replace(/-session-[^-:]+/, `-session-${randomId}`);
+                        } else {
+                            url.username = url.username ? `${url.username}-session-${randomId}` : `session-${randomId}`;
+                        }
+                        this.logger.info(`[PROXY ROTATION] Novo Túnel (Sticky IP Ativado): ${url.username}`);
                     }
 
                     const rotatedProxyUrl = url.toString();
