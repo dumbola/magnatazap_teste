@@ -1,4 +1,4 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://178.156.166.139:4000';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.magnatazap.com';
 
 export const API_URL = BASE_URL;
 

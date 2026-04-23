@@ -5,10 +5,21 @@ import { Browsers, DisconnectReason } from '@whiskeysockets/baileys';
 import { ProxyTurboService } from './proxy-turbo.service';
 import { OpenaiService } from '../openai/openai.service';
 import { ProfileService } from '../instance/profile.service';
+import {
+    buildWebshareProxyForCountry,
+    getDefaultWebshareProxyUrl,
+    normalizeIso2Country,
+} from '@repo/wa-engine';
 
 import * as path from 'path';
 import * as fs from 'fs';
 import * as sharp from 'sharp';
+
+/** Opções de região em POST /instance/init (body + header x-client-country). */
+export type InitSessionRegionOptions = {
+    clientCountry?: string;
+    useWebshareRegion?: boolean;
+};
 
 @Injectable()
 export class WhatsappService implements OnModuleInit {
@@ -16,13 +27,6 @@ export class WhatsappService implements OnModuleInit {
     public sessions = new Map<string, WhatsappClient>();
     private pairingCodes = new Map<string, { code: string, expiresAt: number }>();
     private connectionStatuses = new Map<string, string>();
-
-    private proxyIndex = 0;
-
-    // [FIX] Support multiple proxies (Comma separated)
-    private readonly proxies: string[] = process.env.WA_PROXY_URL
-        ? process.env.WA_PROXY_URL.split(',').map(p => p.trim())
-        : [];
 
     constructor(
         private prisma: PrismaService,
@@ -161,7 +165,15 @@ export class WhatsappService implements OnModuleInit {
     private pendingDisconnects = new Map<string, NodeJS.Timeout>();
     private connectionStartTimes = new Map<string, number>(); // [STRICT] Track Start Time
 
-    async initSession(sessionId: string, name: string, userId: string, phoneNumber?: string, useTurbo = false, retryCount = 0): Promise<any> {
+    async initSession(
+        sessionId: string,
+        name: string,
+        userId: string,
+        phoneNumber?: string,
+        useTurbo = false,
+        retryCount = 0,
+        initRegion?: InitSessionRegionOptions
+    ): Promise<any> {
         // [STRICT] Start Clock
         this.connectionStartTimes.set(sessionId, Date.now());
         this.connectionStatuses.set(sessionId, 'CONNECTING');
@@ -191,7 +203,12 @@ export class WhatsappService implements OnModuleInit {
 
         // [CONFIG] 1. Check for existing Persistent Config to Ensure Immutability
         const existingInstance = await this.prisma.instance.findUnique({ where: { sessionId } });
-        let sessionConfig: { proxyUrl?: string, browser?: [string, string, string] } = {};
+        let sessionConfig: {
+            proxyUrl?: string;
+            browser?: [string, string, string];
+            clientCountry?: string;
+            useWebshareRegion?: boolean;
+        } = {};
 
         try {
             if (existingInstance?.proxyConfig) {
@@ -206,6 +223,12 @@ export class WhatsappService implements OnModuleInit {
             this.logger.warn(`Failed to parse proxyConfig for ${sessionId}, resetting.`);
         }
 
+        // [MIGRACAO] Remover proxy legado Oxylabs — obrigatório Webshare
+        if (sessionConfig.proxyUrl && /oxylabs\.io/i.test(sessionConfig.proxyUrl)) {
+            this.logger.warn(`[PROXY] Removido proxyConfig legado (Oxylabs) para ${sessionId} → a usar Webshare.`);
+            delete sessionConfig.proxyUrl;
+        }
+
         // [HARDENING] Blacklist Unstable IPs (User Request)
         if (sessionConfig.proxyUrl && sessionConfig.proxyUrl.includes('.85.28.')) {
             this.logger.warn(`[PROXY GUARD] 🛡️ Blocked unstable proxy ${sessionConfig.proxyUrl} for ${sessionId}. Falling back to pool.`);
@@ -218,13 +241,43 @@ export class WhatsappService implements OnModuleInit {
             this.logger.log(`[CONFIG] Updated/Assigned Persistent Browser for ${sessionId} to MacOS`);
         }
 
-        // [CONFIG] 3. Assign Persistent Proxy (If missing and available)
-        if (!sessionConfig.proxyUrl && this.proxies.length > 0) {
-            sessionConfig.proxyUrl = this.proxies[this.proxyIndex % this.proxies.length];
-            this.proxyIndex++;
-            this.logger.log(`[CONFIG] Assigned New Persistent Proxy for ${sessionId}: ${sessionConfig.proxyUrl}`);
-        } else if (!sessionConfig.proxyUrl) {
-            this.logger.warn(`[CONFIG] No proxy configured/available for ${sessionId}. Using DIRECT.`);
+        // [CONFIG] 2b. Webshare por país (useWebshareRegion + clientCountry no body / x-client-country)
+        if (initRegion?.useWebshareRegion) {
+            const cc = normalizeIso2Country(initRegion.clientCountry);
+            if (cc) {
+                const wsUrl = buildWebshareProxyForCountry(cc);
+                if (wsUrl) {
+                    sessionConfig.proxyUrl = wsUrl;
+                    sessionConfig.clientCountry = cc;
+                    sessionConfig.useWebshareRegion = true;
+                    this.logger.log(`[CONFIG] Webshare por região ${cc} (WEBSHARE_WA_DSN) → instância ${sessionId}`);
+                } else {
+                    this.logger.warn(
+                        `[CONFIG] useWebshareRegion+${cc}: defina WEBSHARE_WA_DSN (e user base) no servidor. A tentar Webshare padrão.`
+                    );
+                }
+            } else {
+                this.logger.warn(
+                    '[CONFIG] useWebshareRegion sem clientCountry ISO2 (body clientCountry ou header x-client-country).'
+                );
+            }
+        }
+
+        // [CONFIG] 3. Apenas Webshare: país padrão (WEBSHARE_DEFAULT_COUNTRY) se ainda sem proxy
+        if (!sessionConfig.proxyUrl) {
+            const fallback = getDefaultWebshareProxyUrl();
+            if (fallback) {
+                sessionConfig.proxyUrl = fallback;
+                sessionConfig.clientCountry = sessionConfig.clientCountry
+                    || (process.env.WEBSHARE_DEFAULT_COUNTRY || 'BR');
+                this.logger.log(
+                    `[CONFIG] Webshare padrão (${sessionConfig.clientCountry}) → ${sessionId}`
+                );
+            } else {
+                this.logger.warn(
+                    `[CONFIG] WEBSHARE_WA_DSN em falta: ${sessionId} fica em DIRECT (sem proxy).`
+                );
+            }
         }
 
         const proxyConfigString = JSON.stringify(sessionConfig);
@@ -517,11 +570,8 @@ export class WhatsappService implements OnModuleInit {
         const instance = await this.prisma.instance.findUnique({ where: { sessionId } });
         if (!instance) return;
 
-        // 1. Next Proxy (Circular)
-        const nextProxy = this.proxies.length > 0
-            ? this.proxies[this.proxyIndex % this.proxies.length]
-            : undefined;
-        this.proxyIndex++;
+        // 1. Só Webshare (país padrão)
+        const nextProxy = getDefaultWebshareProxyUrl();
 
         // 2. New Browser (Standard)
         const newBrowser = Browsers.ubuntu('Chrome');

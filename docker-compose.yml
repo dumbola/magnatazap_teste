@@ -4,6 +4,15 @@ services:
   postgres:
     image: postgres:15-alpine
     restart: always
+    stop_grace_period: 15s  # Permite shutdown gracioso - evita recovery mode por kill abrupto
+    command:
+      - postgres
+      - -c
+      - tcp_keepalives_idle=30
+      - -c
+      - tcp_keepalives_interval=10
+      - -c
+      - tcp_keepalives_count=6
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
@@ -12,6 +21,13 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # pg_isready + SELECT 1: só "healthy" quando queries reais funcionam (evita recovery mode)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d whatsapp_saas && PGPASSWORD=$$POSTGRES_PASSWORD psql -h 127.0.0.1 -U user -d whatsapp_saas -c 'SELECT 1' -q || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 120s
 
   redis:
     image: redis:7-alpine
@@ -34,32 +50,34 @@ services:
     shm_size: '8gb'
 
     environment:
-      DATABASE_URL: postgres://user:password@postgres:5432/whatsapp_saas
+      DATABASE_URL: postgres://user:password@postgres:5432/whatsapp_saas?connection_limit=5&connect_timeout=60&pool_timeout=90
       REDIS_HOST: redis
       REDIS_PORT: 6379
       NODE_ENV: production
       # [STABILITY] Increase Node Heap for high-concurrency
       NODE_OPTIONS: "--max-old-space-size=16384"
-      FRONTEND_URL: "http://178.156.166.139:3000"
+      FRONTEND_URL: "https://magnatazap.com"
       # [PROXY] Expose Proxy URL to Container
       WA_PROXY_URL: ${WA_PROXY_URL}
     volumes:
       - whatsapp_sessions:/app/sessions
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://178.156.166.139:4000
+        NEXT_PUBLIC_API_URL: https://api.magnatazap.com
     restart: always
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://178.156.166.139:4000
+      NEXT_PUBLIC_API_URL: https://api.magnatazap.com
     depends_on:
       - api
 
@@ -76,6 +94,38 @@ services:
     depends_on:
       - api
       - web
+
+  proxy-manager:
+    image: luminati/luminati-proxy
+    restart: always
+    ports:
+      - "22999:22999" # Admin Interface
+      - "24000:24000" # Proxy Port
+    environment:
+      - LUMINATI_CUSTOMER=hl_b1aa2a1f
+      - LUMINATI_ZONE=5k
+      - LUMINATI_PASSWORD=benxs7ng2f9d
+    # [AUTO-CONFIG] Start with port 24000 configured for the zone
+    command:
+      - luminati-proxy
+      - "--port"
+      - "24000"
+      - "--zone"
+      - "5k"
+      - "--customer"
+      - "hl_b1aa2a1f"
+      - "--password"
+      - "benxs7ng2f9d"
+      - "--whitelist_ips"
+      - "0.0.0.0/0"
+      - "--www_whitelist_ips"
+      - "0.0.0.0/0"
+      - "--log"
+      - "info"
+      - "--www"
+      - "22999"
+      - "--proxy_type"
+      - "http"
 
 volumes:
   postgres_data:

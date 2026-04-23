@@ -58,7 +58,7 @@ export default function DashboardPage() {
     const [stats, setStats] = useState<DailyStats | null>(null);
     const [loading, setLoading] = useState(false);
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://178.156.166.139:4000';
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.magnatazap.com';
 
     // --- Calendar Interactions ---
     const handleDateClick = (date: Date) => {

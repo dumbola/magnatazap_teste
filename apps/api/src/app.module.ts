@@ -7,6 +7,7 @@ import { LoggerController } from './logger/logger.controller';
 import { PrismaLogger } from './logger/prisma.logger';
 import { StatsController } from './stats/stats.controller';
 import { AuthModule } from './auth/auth.module';
+import { PublicHealthController } from './health/public-health.controller';
 
 
 @Module({
@@ -21,7 +22,7 @@ import { AuthModule } from './auth/auth.module';
         CampaignModule,
         AuthModule
     ],
-    controllers: [LoggerController, StatsController],
+    controllers: [LoggerController, StatsController, PublicHealthController],
     providers: [PrismaService, PrismaLogger],
     exports: [PrismaService, PrismaLogger],
 })

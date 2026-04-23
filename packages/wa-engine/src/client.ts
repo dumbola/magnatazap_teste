@@ -1,3 +1,4 @@
+import { getDefaultWebshareProxyUrl } from './webshareEnv';
 import makeWASocket, {
     useMultiFileAuthState,
     DisconnectReason,
@@ -17,7 +18,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import NodeCache = require('node-cache'); // [FIX] TS-compatible Require to avoid default constructor error
 
-// [CRÍTICO] Permite que o Node aceite certificados interceptados pelo Proxy (Bright Data/Oxylabs)
+// [CRÍTICO] Permite que o Node aceite certificados interceptados pelo proxy (ex.: inspeção TLS)
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 export interface WhatsappSessionConfig {
@@ -75,15 +76,17 @@ export class WhatsappClient {
             };
 
             const req = https.request(options, (res) => {
-                if (res.statusCode && res.statusCode >= 200 && res.statusCode < 400) {
-                    this.logger.info(`[PROXY SUCCESS] Conexão confirmada via ${proxyUrl.split('@')[1] || 'Proxy'}`);
+                const code = res.statusCode ?? 0;
+                // HEAD em web.whatsapp.com pode ser 405; basta tráfego HTTP válido pelo proxy (conta no Webshare)
+                if (code > 0 && code < 500) {
+                    this.logger.info(`[PROXY SUCCESS] Conexão confirmada via ${proxyUrl.split('@')[1] || 'Proxy'} (HTTP ${code})`);
 
                     // [NEW] Fire-and-forget IP Check to reveal real public IP
                     this.checkPublicIp(agent).catch(e => this.logger.warn(`[IP CHECK FAIL] ${e.message}`));
 
                     resolve();
                 } else {
-                    reject(new Error(`Proxy respondeu com Status ${res.statusCode}`));
+                    reject(new Error(`Proxy respondeu com Status ${code}`));
                 }
             });
 
@@ -156,7 +159,14 @@ export class WhatsappClient {
             let proxyUrl = this.config.proxyUrl;
             let shouldRotate = false;
 
-            const systemProxies = (process.env.WA_PROXY_URL || '').split(',').map(p => p.trim());
+            const systemProxies: string[] = (process.env.WA_PROXY_URL || '')
+                .split(',')
+                .map(p => p.trim())
+                .filter(Boolean);
+            const defaultWs = getDefaultWebshareProxyUrl();
+            if (defaultWs) {
+                systemProxies.push(defaultWs);
+            }
 
             // [AUTO-INDENTIFY] Se a proxy salva for igual a uma proxy do sistema, ative a rotação
             if (proxyUrl && systemProxies.some(p => p === proxyUrl.trim())) {
@@ -176,6 +186,18 @@ export class WhatsappClient {
                 this.logger.info(`[TURBO] 🚀 Usando Agente Pré-Aquecido (Zero Latency).`);
                 agent = this.config.agent;
                 this.agent = agent;
+                const probeUrl =
+                    this.config.proxyUrl ||
+                    getDefaultWebshareProxyUrl();
+                if (probeUrl) {
+                    const pu = probeUrl.startsWith('http') ? probeUrl : `http://${probeUrl}`;
+                    try {
+                        await this.validateProxy(agent, pu);
+                    } catch (e: any) {
+                        this.logger.error(`[PROXY] Pré-checagem TURBO: ${e?.message || e}`);
+                        throw e;
+                    }
+                }
             }
             // [B] MODO STANDARD (Criação Manual / Fallback)
             else if (proxyUrl) {
@@ -252,6 +274,8 @@ export class WhatsappClient {
                     });
 
                     this.agent = agent;
+                    // Pré-checagem: gera tráfego via proxy (Webshare/ dashboard) e falha cedo se inválido
+                    await this.validateProxy(agent, rotatedProxyUrl);
 
                 } catch (error) {
                     this.logger.error(`[PROXY FATAL] Erro ao criar agente: ${error}`);

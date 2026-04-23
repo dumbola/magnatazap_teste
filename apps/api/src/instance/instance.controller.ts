@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Delete, Param, UseGuards, Request, Put, Logger as NestLogger } from '@nestjs/common';
+import { Body, Controller, Get, Post, Delete, Param, UseGuards, Request, Put, Logger as NestLogger, Headers } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -96,14 +96,37 @@ export class InstanceController {
     }
 
     @Post('init')
-    async initInstance(@Body() body: { name: string; phoneNumber?: string }, @Request() req) {
+    async initInstance(
+        @Body()
+        body: {
+            name: string;
+            phoneNumber?: string;
+            clientCountry?: string;
+            useWebshareRegion?: boolean;
+        },
+        @Headers('x-client-country') xClientCountry: string | undefined,
+        @Request() req
+    ) {
         try {
             this.logger.log(`Autenticado: ${req.user.email} (ID: ${req.user.id}) via Token iniciando instância: ${body.name}`);
             const userId = req.user.id;
             const sessionId = `${userId}-${body.name}`;
-            // We pass 'name' as visual name, but 'sessionId' as the engine ID
+            const clientCountry = (body.clientCountry?.trim() || xClientCountry?.trim()) || undefined;
+            const initRegion =
+                body.useWebshareRegion === true
+                    ? { clientCountry, useWebshareRegion: true as const }
+                    : undefined;
             // [TURBO] Activate Turbo Mode for manual interaction (faster QR generation)
-            return await this.whatsappService.initSession(sessionId, body.name, userId, body.phoneNumber, true);
+            // Região Webshare: useWebshareRegion + clientCountry (body ou x-client-country)
+            return await this.whatsappService.initSession(
+                sessionId,
+                body.name,
+                userId,
+                body.phoneNumber,
+                true,
+                0,
+                initRegion
+            );
         } catch (error: any) {
             this.logger.error(`Failed to init instance: ${error.message}`, error.stack);
             throw error; // Let Nest handle the 500, but now we have logs

@@ -1,0 +1,20 @@
+ERRO: "Failed to connect to 5.161.85.105 port 4000"
+= O PHP/site não consegue abrir TCP à porta 4000 (firewall, API parada, ou IP errado).
+
+1) MESMO SERVIDOR (PHP e Docker na mesma VM)
+   No ksecret/PHP, use o backend:
+     http://127.0.0.1:4000
+   ou a rede interna do Docker, NÃO o IP público:4000 (muitas firewalls bloqueiam).
+
+2) INTERNET / OUTRO HOSPEDAJE
+   A porta 4000 tem de estar ABERTA no firewall / painel do VPS, OU
+   use Nginx Proxy Manager (já no docker-compose) com SSL na 443 e domínio tipo:
+     https://api.seudominio.com  ->  proxy interno para o serviço "api" porta 4000
+   e no PHP aponte para esse HTTPS, sem :4000.
+
+3) Teste rápido (no servidor)
+   curl -s http://127.0.0.1:4000/healthz
+   Deve devolver: {"ok":true,...}
+
+4) Rebuild
+   docker compose up -d --build api

@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { HttpsProxyAgent } from 'https-proxy-agent';
+import { getDefaultWebshareProxyUrl } from '@repo/wa-engine';
 
 @Injectable()
 export class ProxyTurboService implements OnApplicationBootstrap {
@@ -13,7 +14,7 @@ export class ProxyTurboService implements OnApplicationBootstrap {
     private readonly REFILL_INTERVAL = 2000;
 
     onApplicationBootstrap() {
-        this.logger.log('[TURBO] 🚀 Starting Universal Engine (Webshare/BrightData Ready)...');
+        this.logger.log('[TURBO] 🚀 Starting Webshare pool...');
         this.refillPool();
         setInterval(() => this.refillPool(), this.REFILL_INTERVAL);
     }
@@ -95,14 +96,11 @@ export class ProxyTurboService implements OnApplicationBootstrap {
 
     public createUniversalAgent(): { id: string, agent: any, createdAt: number } | null {
         try {
-            const proxyUrlRaw = process.env.WA_PROXY_URL;
-            if (!proxyUrlRaw) {
-                this.logger.error('[TURBO] WA_PROXY_URL missing from environment variables');
+            const urlString = getDefaultWebshareProxyUrl();
+            if (!urlString) {
+                this.logger.error('[TURBO] WEBSHARE_WA_DSN / WEBSHARE_DEFAULT_COUNTRY em falta');
                 return null;
             }
-
-            // Normaliza URL
-            const urlString = proxyUrlRaw.split(',')[0].trim();
             // Log masked URL for debug
             this.logger.debug(`[TURBO] Constructing agent from: ${urlString.replace(/:[^:@]+@/, ':***@')}`);
 
