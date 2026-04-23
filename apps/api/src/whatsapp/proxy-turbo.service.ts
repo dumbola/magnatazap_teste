@@ -112,7 +112,6 @@ export class ProxyTurboService implements OnApplicationBootstrap {
             if (!url.protocol.startsWith('http')) url.protocol = 'http:';
 
             const randomId = Math.floor(Math.random() * 1000000);
-            const isWebshare = url.hostname.includes('webshare.io');
 
             // [LÓGICA UNIVERSAL DE INJEÇÃO DE SESSÃO]
             const isWebshare = url.hostname.includes('webshare.io');
