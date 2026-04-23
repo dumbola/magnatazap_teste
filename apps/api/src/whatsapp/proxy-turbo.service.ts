@@ -115,12 +115,16 @@ export class ProxyTurboService implements OnApplicationBootstrap {
             const isWebshare = url.hostname.includes('webshare.io');
 
             // [LÓGICA UNIVERSAL DE INJEÇÃO DE SESSÃO]
-            // Injeção de Session ID no username para IPs Estáticos (Sticky IPs)
-            // A Webshare (com Endpoint rotativo) também precisa disso para que uma instância mantenha o MESMO IP.
-            if (url.username.includes('-session-')) {
-                url.username = url.username.replace(/-session-[^-:]+/, `-session-${randomId}`);
+            const isWebshare = url.hostname.includes('webshare.io');
+            if (isWebshare) {
+                // A Webshare (Datacenter p.webshare.io) NÃO suporta session-ID e retorna 400 Bad Request
+                this.logger.debug(`[TURBO] Webshare detectada. Mantendo URL original.`);
             } else {
-                url.username = url.username ? `${url.username}-session-${randomId}` : `session-${randomId}`;
+                if (url.username.includes('-session-')) {
+                    url.username = url.username.replace(/-session-[^-:]+/, `-session-${randomId}`);
+                } else {
+                    url.username = url.username ? `${url.username}-session-${randomId}` : `session-${randomId}`;
+                }
             }
 
             const rotatedUrl = url.toString();
